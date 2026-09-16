@@ -26,7 +26,7 @@ jobs:
           EPG_SOURCES=(
             "http://epg.51zmt.top:8000/e1.xml.gz"
             "http://epg.51zmt.top:8000/e2.xml.gz"
-            # "https://gitee.com/gsls200808/xmltvepg/raw/master/e9.xml.gz"
+            "https://gitee.com/gsls200808/xmltvepg/raw/master/e9.xml.gz"
             # "https://epg.zsdc.eu.org/t.xml.gz"
             # "https://raw.githubusercontent.com/kuke31/xmlgz/main/e.xml.gz"
             # "https://raw.githubusercontent.com/kuke31/xmlgz/main/all.xml.gz"
@@ -82,24 +82,23 @@ jobs:
             ' "$FILE" >> temp_all.txt
             FILE_IDX=$((FILE_IDX+1))
           done
-
-          # ==================== ✅ 整块去重 ====================
-          # channel：重复ID = 整块删除（首次出现优先）
-          # programme：同一频道 + 同一天（YYYYMMDD）= 整块删除（前一个文件已有则跳过）
-          awk '
+          
+          TODAY=$(TZ=Asia/Shanghai date +%Y%m%d)
+          
+          awk -v today="$TODAY" '
             /^FILEMARKER_/ {
               num = $0
               sub(/^FILEMARKER_/, "", num)
               file_idx = num + 0
               next
             }
-
-            # --------------------------
-            # channel 整块去重（ID 维度）
-            # --------------------------
+          
+            # channel 去重
             /<channel / {
-              match($0,/id="([^"]+)"/)
-              id = substr($0,RSTART+4,RLENGTH-5)
+              id = ""
+              if (match($0, /id="[^"]*"/)) {
+                id = substr($0, RSTART+4, RLENGTH-5)
+              }
               skip_chan = (id != "" && seen_c[id]++)
               if (skip_chan) in_skip_chan = 1
             }
@@ -107,17 +106,25 @@ jobs:
               if (/<\/channel>/) in_skip_chan = 0
               next
             }
-
-            # --------------------------
-            # programme 整块去重（channel+date 维度）
-            # 如果前一个文件已有该频道这一天的数据 → 跳过
-            # --------------------------
+          
+            # programme：先判断 start 是否当天，不是整块删
             /<programme / {
-              match($0,/channel="([^"]+)"/)
-              c = substr($0,RSTART+8,RLENGTH-9)
-              match($0,/start="([^"]+)"/)
-              s = substr($0,RSTART+6,RLENGTH-7)
-              date = substr(s,1,8)
+              s = ""
+              if (match($0, /start="[^"]*"/)) {
+                s = substr($0, RSTART+7, RLENGTH-8)
+              }
+              date = substr(s, 1, 8)
+          
+              if (date != today) {
+                in_skip_prog = 1
+                next
+              }
+          
+              c = ""
+              if (match($0, /channel="[^"]*"/)) {
+                c = substr($0, RSTART+9, RLENGTH-10)
+              }
+          
               key = c "," date
               if (key != "," && key in seen_p && seen_p[key] < file_idx) {
                 in_skip_prog = 1
@@ -125,11 +132,12 @@ jobs:
                 seen_p[key] = file_idx
               }
             }
+          
             in_skip_prog {
               if (/<\/programme>/) in_skip_prog = 0
               next
             }
-
+          
             1
           ' temp_all.txt > temp_clean.txt
 
@@ -144,6 +152,9 @@ jobs:
 
           # 时区
           sed -i 's/+0000/+0800/g' e.xml
+
+          # 内容
+          sed -i 's/ *--免费使用//g' e.xml
 
           # 压缩
           gzip -9 -c e.xml > e.xml.gz
