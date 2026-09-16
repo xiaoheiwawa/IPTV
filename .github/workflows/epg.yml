@@ -83,10 +83,11 @@ jobs:
             FILE_IDX=$((FILE_IDX+1))
           done
 
-          # ==================== ✅ 整块去重 ====================
-          # channel：重复ID = 整块删除（首次出现优先）
-          # programme：同一频道 + 同一天（YYYYMMDD）= 整块删除（前一个文件已有则跳过）
-          awk '
+          # ==================== ✅ 整块去重 + 只保留当天 ====================
+          TODAY=$(TZ=Asia/Shanghai date +%Y%m%d)
+          echo "📅 只保留当天: $TODAY"
+
+          awk -v today="$TODAY" '
             /^FILEMARKER_/ {
               num = $0
               sub(/^FILEMARKER_/, "", num)
@@ -110,7 +111,7 @@ jobs:
 
             # --------------------------
             # programme 整块去重（channel+date 维度）
-            # 如果前一个文件已有该频道这一天的数据 → 跳过
+            # 只保留当天；同频道同一天只保留第一个来源
             # --------------------------
             /<programme / {
               match($0,/channel="([^"]+)"/)
@@ -119,14 +120,25 @@ jobs:
               s = substr($0,RSTART+6,RLENGTH-7)
               date = substr(s,1,8)
               key = c "," date
-              if (key != "," && key in seen_p && seen_p[key] < file_idx) {
+
+              # 不是当天 → 整块跳过
+              if (date != today) {
                 in_skip_prog = 1
-              } else if (key != ",") {
-                seen_p[key] = file_idx
+              } else if (key != "," && key in seen_p && seen_p[key] < file_idx) {
+                # 当天但同频道同一天已出现过 → 整块跳过
+                in_skip_prog = 1
+              } else {
+                if (key != ",") seen_p[key] = file_idx
+                in_skip_prog = 0
+                print
               }
             }
             in_skip_prog {
               if (/<\/programme>/) in_skip_prog = 0
+              next
+            }
+            /<\/programme>/ {
+              print
               next
             }
 
