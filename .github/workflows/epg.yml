@@ -153,9 +153,6 @@ jobs:
           # 时区
           sed -i 's/+0000/+0800/g' e.xml
 
-          # 内容
-          sed -i 's/ *--免费使用//g' e.xml
-
           # 压缩
           gzip -9 -c e.xml > e.xml.gz
 
