@@ -66,33 +66,18 @@ jobs:
             opencc -i "$f" -o "$f" -c t2s.json || true
           done
 
-          # ==================== 提取完整标签块（只保留当天 programme） ====================
-          TODAY=$(TZ=Asia/Shanghai date +%Y%m%d)
-
+          # ==================== 提取完整标签块 ====================
           > temp_all.txt
           FILE_IDX=0
           for FILE in temp_*.xml; do
             printf "FILEMARKER_%d\n" "$FILE_IDX" >> temp_all.txt
-            awk -v today="$TODAY" '
+            awk '
               /^[ \t]*<channel / { inChan=1 }
               inChan { print }
               /^[ \t]*<\/channel>/ { inChan=0 }
 
-              /^[ \t]*<programme / {
-                match($0,/start="([^"]+)"/)
-                s = substr($0,RSTART+6,RLENGTH-7)
-                date = substr(s,1,8)
-                if (date == today) {
-                  inProg=1
-                  print
-                } else {
-                  inProg=0
-                }
-                next
-              }
-
+              /^[ \t]*<programme / { inProg=1 }
               inProg { print }
-
               /^[ \t]*<\/programme>/ { inProg=0 }
             ' "$FILE" >> temp_all.txt
             FILE_IDX=$((FILE_IDX+1))
