@@ -156,7 +156,7 @@ jobs:
           cat temp_clean.txt >> e.xml
           echo "</tv>" >> e.xml
 
-          # 时区替换 + 清理垃圾文本
+          # 时区替换 + 清理其他文本
           sed -i 's/+0000/+0800/g' e.xml
           sed -i 's/ *--免费使用//g' e.xml
 
